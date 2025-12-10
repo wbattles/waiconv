@@ -1,0 +1,72 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/wbattles/waichat
+  pullPolicy: Always
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: waichat.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  service:
+    port: 6379
+  persistence:
+    enabled: false
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "15-alpine"
+  service:
+    port: 5432
+  database: chat
+  user: chat
+  password: ""
+  existingSecret: ""
+  createSecret: true
+  persistentVolumeClaim:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+    storageClassName: ""
+
+config:
+  redis:
+    host: "waichat-redis"
+    port: "6379"
+    db: "0"
+    key: "chat:messages"
+  kafka:
+    bootstrapServers: ""
+    saslUsername: ""
+    saslPassword: ""
+    topic: ""
+    groupId: ""
+
+    saslEnabled: false
+    securityProtocol: "PLAINTEXT"
+    saslMechanism: "PLAIN"
+  postgres:
+    host: ""
+  maxMessages: 10

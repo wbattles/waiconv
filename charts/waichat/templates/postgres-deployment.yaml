@@ -1,0 +1,56 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "waichat.fullname" . }}-postgres
+  labels:
+    {{- include "waichat.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "waichat.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "waichat.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        env:
+        {{- $secretName := default (printf "%s-postgres-secret" (include "waichat.fullname" .)) .Values.postgres.existingSecret }}
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: {{ $secretName | quote }}
+              key: database
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ $secretName | quote }}
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $secretName | quote }}
+              key: password
+        {{- if .Values.postgres.persistentVolumeClaim.enabled }}
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        {{- end }}
+      {{- if .Values.postgres.persistentVolumeClaim.enabled }}
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: {{ include "waichat.fullname" . }}-postgres-pvc
+      {{- end }}
+{{- end }}
