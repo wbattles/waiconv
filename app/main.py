@@ -12,6 +12,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from kafka import KafkaProducer, KafkaConsumer
+from kafka.structs import TopicPartition
 import redis.asyncio as redis
 import asyncpg
 
@@ -133,32 +134,57 @@ def consumer_loop():
     global consumer_running
     print("DEBUG: consumer_loop started")
 
-    # Create and use the consumer in this thread
     cfg = build_kafka_config()
+    local_consumer = None
     try:
+        # Create consumer without topics; subscribe explicitly for group join
         local_consumer = KafkaConsumer(
-            KAFKA_TOPIC,
             **cfg,
             group_id=KAFKA_GROUP_ID,
             auto_offset_reset="earliest",
             enable_auto_commit=True,
             consumer_timeout_ms=1000,
         )
-        print(f"DEBUG: consumer thread subscribed to {[KAFKA_TOPIC]}")
-        try:
-            # Initial poll to trigger group join and assignment
-            local_consumer.poll(timeout_ms=1000)
+        print("DEBUG: consumer created; subscribing to topic")
+        local_consumer.subscribe([KAFKA_TOPIC])
+        print(f"DEBUG: consumer subscribed to {[KAFKA_TOPIC]}")
+
+        # Wait up to ~10s for assignment
+        assigned = False
+        for i in range(10):
+            try:
+                local_consumer.poll(timeout_ms=1000, max_records=1)
+            except Exception as e:
+                print(f"WARN: initial poll failed: {e}")
+            assignment = local_consumer.assignment()
+            parts = local_consumer.partitions_for_topic(KAFKA_TOPIC)
             print(
-                f"DEBUG: initial assignment={local_consumer.assignment()} "
-                f"partitions_for_topic={local_consumer.partitions_for_topic(KAFKA_TOPIC)}"
+                f"DEBUG: assignment check {i+1}/10 assignment={assignment} "
+                f"partitions_for_topic={parts}"
             )
-        except Exception as e:
-            print(f"WARN: initial poll failed: {e}")
+            if assignment:
+                assigned = True
+                break
+
+        # Fallback: manual assignment if group hasn't assigned
+        if not assigned:
+            parts = local_consumer.partitions_for_topic(KAFKA_TOPIC) or set()
+            if not parts:
+                print("ERROR: No partitions found for topic; cannot assign")
+                return
+            tps = [TopicPartition(KAFKA_TOPIC, p) for p in sorted(parts)]
+            local_consumer.assign(tps)
+            # Start at end so we process only new messages
+            try:
+                local_consumer.seek_to_end(*tps)
+            except Exception as e:
+                print(f"WARN: seek_to_end failed: {e}")
+            print(f"DEBUG: manual assignment applied tps={tps}")
 
         empty_polls = 0
         while consumer_running:
             try:
-                msg_pack = local_consumer.poll(timeout_ms=1000)
+                msg_pack = local_consumer.poll(timeout_ms=1000, max_records=50)
             except Exception as e:
                 print(f"WARN: Kafka poll error: {e}")
                 time.sleep(1)
@@ -176,6 +202,7 @@ def consumer_loop():
             empty_polls = 0
 
             for _tp, messages in msg_pack.items():
+                print(f"DEBUG: received {len(messages)} messages from {_tp}")
                 for msg in messages:
                     value_bytes = msg.value
                     if value_bytes is None:
@@ -191,7 +218,8 @@ def consumer_loop():
     finally:
         print("DEBUG: consumer_loop stopping, closing consumer")
         try:
-            local_consumer.close()
+            if local_consumer:
+                local_consumer.close()
         except Exception:
             pass
 
