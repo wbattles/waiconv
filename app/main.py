@@ -31,7 +31,7 @@ REDIS_HOST = os.getenv("REDIS_HOST", "waiconv-redis-master")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 
-MESSAGES_KEY = os.getenv("REDIS_MESSAGES_KEY", "chat_messages")
+MESSAGES_KEY = os.getenv("REDIS_KEY", "chat_messages")
 MAX_MESSAGES = int(os.getenv("MAX_MESSAGES", "5"))
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
