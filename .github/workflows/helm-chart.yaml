@@ -6,10 +6,10 @@ on:
       - main
       - dev
     paths:
-      - chart/waiconv/templates/**
-      - chart/waiconv/values.yaml
-      - chart/waiconv/Chart.yaml
-      - .github/workflows/chart.yaml
+      - charts/waiconv/templates/**
+      - charts/waiconv/values.yaml
+      - charts/waiconv/Chart.yaml
+      - .github/workflows/helm-chart.yaml
 
 jobs:
   release:
@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure Git
         run: |
