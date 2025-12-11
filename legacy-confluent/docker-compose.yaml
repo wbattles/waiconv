@@ -1,0 +1,30 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: click-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: .
+    pull_policy: build
+    container_name: click
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+    environment:
+      # --- Redis config ---
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_KEY: "click_count"
+
+      # --- Kafka / Confluent Cloud config ---
+      KAFKA_BOOTSTRAP_SERVERS: "pkc-xxxxx.us-east-2.aws.confluent.cloud:9092"
+      KAFKA_SASL_USERNAME: "XXXXXXXXXXXXXXXX"
+      KAFKA_SASL_PASSWORD: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      KAFKA_TOPIC: "topic_0"
+      KAFKA_GROUP_ID: "click-local"
