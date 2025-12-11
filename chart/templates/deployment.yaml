@@ -31,7 +31,7 @@ spec:
           value: {{ .Values.config.redis.port | quote }}
         - name: REDIS_DB
           value: {{ .Values.config.redis.db | quote }}
-        - name: REDIS_KEY
+        - name: REDIS_MESSAGES_KEY
           value: {{ .Values.config.redis.key | quote }}
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: {{ .Values.config.kafka.bootstrapServers | quote }}

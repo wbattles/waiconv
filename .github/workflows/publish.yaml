@@ -6,8 +6,8 @@ on:
       - main
       - dev
     paths:
-      - app/**
-      - .github/workflows/confluent-publish.yaml
+      - confluent-app/**
+      - .github/workflows/publish.yaml
 
 permissions:
   contents: read
@@ -40,8 +40,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./app
-          file: ./app/Dockerfile
+          context: ./confluent-app
+          file: ./confluent-app/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest

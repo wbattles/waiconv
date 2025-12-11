@@ -3,7 +3,6 @@ import json
 import os
 import threading
 from typing import Set
-
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
@@ -18,6 +17,9 @@ app = FastAPI()
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
 KAFKA_SASL_USERNAME = os.getenv("KAFKA_SASL_USERNAME", "")
 KAFKA_SASL_PASSWORD = os.getenv("KAFKA_SASL_PASSWORD", "")
+KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "")
+KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "")
+KAFKA_SASL_ENABLED = os.getenv("KAFKA_SASL_ENABLED", "false").lower() == "true"
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "chat-messages")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "chat-consumers")
 
@@ -53,13 +55,24 @@ async def root():
 
 
 def build_kafka_config() -> dict:
-    return {
+    cfg: dict[str, str] = {
         "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
-        "security.protocol": "SASL_SSL",
-        "sasl.mechanisms": "PLAIN",
-        "sasl.username": KAFKA_SASL_USERNAME,
-        "sasl.password": KAFKA_SASL_PASSWORD,
     }
+
+    if KAFKA_SECURITY_PROTOCOL:
+        cfg["security.protocol"] = KAFKA_SECURITY_PROTOCOL
+    else:
+        cfg["security.protocol"] = "SASL_SSL" if KAFKA_SASL_ENABLED else "PLAINTEXT"
+
+    if KAFKA_SASL_ENABLED:
+        if KAFKA_SASL_MECHANISM:
+            cfg["sasl.mechanisms"] = KAFKA_SASL_MECHANISM
+        if KAFKA_SASL_USERNAME:
+            cfg["sasl.username"] = KAFKA_SASL_USERNAME
+        if KAFKA_SASL_PASSWORD:
+            cfg["sasl.password"] = KAFKA_SASL_PASSWORD
+
+    return cfg
 
 
 async def start_redis():
@@ -287,8 +300,8 @@ async def startup_event():
     await start_redis()
     await start_postgres()
 
-    if not KAFKA_BOOTSTRAP_SERVERS or not KAFKA_SASL_USERNAME or not KAFKA_SASL_PASSWORD:
-        print("WARN: Kafka env vars not set, running without Kafka")
+    if not KAFKA_BOOTSTRAP_SERVERS:
+        print("WARN: KAFKA_BOOTSTRAP_SERVERS not set, running without Kafka")
         return
 
     start_producer()
