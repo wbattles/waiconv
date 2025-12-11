@@ -109,7 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadInitialMessages();
   connectWebSocket();
 
-  sendButtonEl.addEventListener("waiconv", (e) => {
+  sendButtonEl.addEventListener("click", (e) => {
     e.preventDefault();
     sendMessage();
   });
