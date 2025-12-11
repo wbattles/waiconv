@@ -231,10 +231,20 @@ async def post_message(payload: dict = Body(...)):
         "ts": ts,
     }
 
+    def delivery_report(err, msg):
+        if err is not None:
+            print("Kafka delivery failed:", err)
+        else:
+            print(
+                f"Kafka delivery succeeded: topic={msg.topic()} "
+                f"partition={msg.partition()} offset={msg.offset()}"
+            )
+
     try:
         value = json.dumps(event).encode("utf-8")
-        producer.produce(KAFKA_TOPIC, value=value)
-        producer.poll(0)
+        producer.produce(KAFKA_TOPIC, value=value, callback=delivery_report)
+        # Force delivery so we see any error in logs
+        producer.flush(5)
         print("Produced Kafka message:", event)
     except Exception as e:
         print(f"Kafka produce failed: {e}")
