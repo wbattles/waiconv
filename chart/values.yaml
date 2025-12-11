@@ -10,15 +10,15 @@ service:
   port: 8000
 
 ingress:
-  enabled: true
+  enabled: false
   className: ""
+  pathType: Prefix
   annotations: {}
   hosts:
     - host: waiconv.local
       paths:
         - path: /
           pathType: Prefix
-  tls: []
 
 resources: {}
 
@@ -41,7 +41,7 @@ postgres:
     port: 5432
   database: chat
   user: chat
-  password: ""
+  password: "password"
   existingSecret: ""
   createSecret: true
   persistentVolumeClaim:
@@ -53,20 +53,36 @@ postgres:
 
 config:
   redis:
-    host: "waiconv-redis"
+    host: "" 
     port: "6379"
     db: "0"
     key: "chat:messages"
   kafka:
-    bootstrapServers: ""
+    # Bootstrap servers for Kafka cluster
+    bootstrapServers: "kafka:9092"
+    topic: "chat-messages"
+    groupId: "chat-consumers"
+    
+    # SASL Authentication (set to true for Confluent Cloud or secured Kafka)
+    saslEnabled: false
+    
+    # Security protocol options:
+    # - PLAINTEXT: No encryption, no authentication
+    # - SSL: Encryption only
+    # - SASL_PLAINTEXT: Authentication without encryption
+    # - SASL_SSL: Authentication with encryption (required for Confluent Cloud)
+    securityProtocol: "PLAINTEXT"
+    
+    # SASL mechanism options:
+    # - PLAIN: Username/password (most common for Confluent Cloud)
+    # - SCRAM-SHA-256: SCRAM authentication
+    # - SCRAM-SHA-512: SCRAM authentication
+    # - OAUTHBEARER: OAuth 2.0 authentication
+    saslMechanism: "PLAIN"
+    
+    # SASL credentials (only used when saslEnabled is true)
     saslUsername: ""
     saslPassword: ""
-    topic: ""
-    groupId: ""
-
-    saslEnabled: false
-    securityProtocol: "PLAINTEXT"
-    saslMechanism: "PLAIN"
   postgres:
     host: ""
   maxMessages: 10

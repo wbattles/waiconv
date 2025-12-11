@@ -26,7 +26,7 @@ spec:
           protocol: TCP
         env:
         - name: REDIS_HOST
-          value: {{ .Values.config.redis.host | quote }}
+          value: {{ default (printf "%s-redis" (include "waiconv.fullname" .)) .Values.config.redis.host | quote }}
         - name: REDIS_PORT
           value: {{ .Values.config.redis.port | quote }}
         - name: REDIS_DB

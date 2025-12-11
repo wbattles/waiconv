@@ -1,4 +1,5 @@
 client.properties
 real-values.yaml
+redpanda.yaml
 ccloud-python-client
 .venv
