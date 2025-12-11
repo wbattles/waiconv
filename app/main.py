@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import threading
+import time
 from typing import Set
 
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ KAFKA_SASL_USERNAME = os.getenv("KAFKA_SASL_USERNAME", "")
 KAFKA_SASL_PASSWORD = os.getenv("KAFKA_SASL_PASSWORD", "")
 
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "chat-messages")
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "chat-consumers")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "chat-consumers-v1")
 
 KAFKA_SASL_ENABLED = os.getenv("KAFKA_SASL_ENABLED", "false").lower() == "true"
 KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
@@ -64,7 +65,10 @@ def build_kafka_config() -> dict:
         cfg["sasl_mechanism"] = KAFKA_SASL_MECHANISM
         cfg["sasl_plain_username"] = KAFKA_SASL_USERNAME
         cfg["sasl_plain_password"] = KAFKA_SASL_PASSWORD
-    print(f"DEBUG: Kafka config: servers={servers} sasl_enabled={KAFKA_SASL_ENABLED} topic={KAFKA_TOPIC} group_id={KAFKA_GROUP_ID}")
+    print(
+        f"DEBUG: Kafka config: servers={servers} "
+        f"sasl_enabled={KAFKA_SASL_ENABLED} topic={KAFKA_TOPIC} group_id={KAFKA_GROUP_ID}"
+    )
     return cfg
 
 
@@ -73,7 +77,10 @@ async def start_redis():
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
     try:
         await redis_client.ping()
-        print(f"Redis connected host={REDIS_HOST} port={REDIS_PORT} db={REDIS_DB} key={MESSAGES_KEY}")
+        print(
+            f"Redis connected host={REDIS_HOST} port={REDIS_PORT} "
+            f"db={REDIS_DB} key={MESSAGES_KEY}"
+        )
     except Exception as e:
         print(f"WARN: Redis ping failed: {e}")
 
@@ -136,7 +143,6 @@ def start_consumer():
         auto_offset_reset="earliest",
         enable_auto_commit=True,
     )
-
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
@@ -212,15 +218,25 @@ def consumer_loop():
     global consumer_running
     assert consumer is not None
     print("DEBUG: consumer_loop started")
+    empty_polls = 0
     while consumer_running:
         try:
             msg_pack = consumer.poll(timeout_ms=1000)
         except Exception as e:
             print(f"WARN: Kafka poll error: {e}")
+            time.sleep(1)
             continue
 
         if not msg_pack:
+            empty_polls += 1
+            if empty_polls % 10 == 0:
+                print(
+                    f"DEBUG: consumer poll returned no messages "
+                    f"(count={empty_polls})"
+                )
             continue
+
+        empty_polls = 0
 
         for _tp, messages in msg_pack.items():
             for msg in messages:
