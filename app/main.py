@@ -68,34 +68,14 @@ def build_kafka_config() -> dict:
     return cfg
 
 
-def start_producer():
-    global producer
-    cfg = build_kafka_config()
-    cfg["acks"] = "all"
-    cfg["retries"] = 5
-    cfg["request_timeout_ms"] = 10000
-    print("DEBUG: creating KafkaProducer")
-    producer = KafkaProducer(**cfg)
-
-
-def start_consumer():
-    global consumer
-    cfg = build_kafka_config()
-    consumer = KafkaConsumer(
-        **cfg,
-        group_id=KAFKA_GROUP_ID,
-        auto_offset_reset="earliest",
-        enable_auto_commit=True,
-    )
-    consumer.subscribe([KAFKA_TOPIC])
-    print(f"DEBUG: KafkaConsumer subscribed to {consumer.subscription()}")
-
 async def start_redis():
     global redis_client
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
     try:
         await redis_client.ping()
-        print(f"Redis connected host={REDIS_HOST} port={REDIS_PORT} db={REDIS_DB} key={MESSAGES_KEY}")
+        print(
+            f"Redis connected host={REDIS_HOST} port={REDIS_PORT} db={REDIS_DB} key={MESSAGES_KEY}"
+        )
     except Exception as e:
         print(f"WARN: Redis ping failed: {e}")
 
@@ -106,7 +86,9 @@ async def start_postgres(max_attempts: int = 10, delay: float = 2.0):
     while attempt < max_attempts:
         attempt += 1
         try:
-            print(f"Connecting to Postgres (attempt {attempt}/{max_attempts}) host={POSTGRES_HOST} db={POSTGRES_DB}")
+            print(
+                f"Connecting to Postgres (attempt {attempt}/{max_attempts}) host={POSTGRES_HOST} db={POSTGRES_DB}"
+            )
             pg_pool = await asyncpg.create_pool(
                 host=POSTGRES_HOST,
                 port=POSTGRES_PORT,
@@ -117,14 +99,16 @@ async def start_postgres(max_attempts: int = 10, delay: float = 2.0):
                 max_size=5,
             )
             async with pg_pool.acquire() as conn:
-                await conn.execute("""
+                await conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS chat_messages (
                         id serial PRIMARY KEY,
                         ts timestamptz NOT NULL,
                         user_name text,
                         text text NOT NULL
                     )
-                """)
+                    """
+                )
             print("Postgres connected and chat_messages table ready")
             return
         except Exception as e:
@@ -133,6 +117,83 @@ async def start_postgres(max_attempts: int = 10, delay: float = 2.0):
             if attempt < max_attempts:
                 await asyncio.sleep(delay)
     print("ERROR: Could not connect to Postgres after retries; continuing without DB")
+
+
+def start_producer():
+    global producer
+    cfg = build_kafka_config()
+    print("DEBUG: creating KafkaProducer")
+    cfg["acks"] = "all"
+    cfg["retries"] = 5
+    cfg["request_timeout_ms"] = 10000
+    producer = KafkaProducer(**cfg)
+
+
+def consumer_loop():
+    global consumer_running
+    print("DEBUG: consumer_loop started")
+
+    # Create and use the consumer in this thread
+    cfg = build_kafka_config()
+    try:
+        local_consumer = KafkaConsumer(
+            KAFKA_TOPIC,
+            **cfg,
+            group_id=KAFKA_GROUP_ID,
+            auto_offset_reset="earliest",
+            enable_auto_commit=True,
+            consumer_timeout_ms=1000,
+        )
+        print(f"DEBUG: consumer thread subscribed to {[KAFKA_TOPIC]}")
+        try:
+            # Initial poll to trigger group join and assignment
+            local_consumer.poll(timeout_ms=1000)
+            print(
+                f"DEBUG: initial assignment={local_consumer.assignment()} "
+                f"partitions_for_topic={local_consumer.partitions_for_topic(KAFKA_TOPIC)}"
+            )
+        except Exception as e:
+            print(f"WARN: initial poll failed: {e}")
+
+        empty_polls = 0
+        while consumer_running:
+            try:
+                msg_pack = local_consumer.poll(timeout_ms=1000)
+            except Exception as e:
+                print(f"WARN: Kafka poll error: {e}")
+                time.sleep(1)
+                continue
+
+            if not msg_pack:
+                empty_polls += 1
+                if empty_polls % 10 == 0:
+                    print(
+                        f"DEBUG: consumer poll returned no messages (count={empty_polls}) "
+                        f"assignment={local_consumer.assignment()}"
+                    )
+                continue
+
+            empty_polls = 0
+
+            for _tp, messages in msg_pack.items():
+                for msg in messages:
+                    value_bytes = msg.value
+                    if value_bytes is None:
+                        continue
+                    try:
+                        data = json.loads(value_bytes.decode("utf-8"))
+                    except Exception as e:
+                        print(f"DEBUG: failed to decode Kafka message: {e}")
+                        continue
+                    print(f"DEBUG: consumed from Kafka: {data}")
+                    if loop is not None:
+                        asyncio.run_coroutine_threadsafe(handle_message(data), loop)
+    finally:
+        print("DEBUG: consumer_loop stopping, closing consumer")
+        try:
+            local_consumer.close()
+        except Exception:
+            pass
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
@@ -179,48 +240,23 @@ async def get_last_messages(limit: int = MAX_MESSAGES):
     print(f"DEBUG: get_last_messages decoded_len={len(result)}")
     return result
 
-def consumer_loop():
-    global consumer_running
-    assert consumer is not None
-    print("DEBUG: consumer_loop started")
 
-    try:
-        consumer.poll(timeout_ms=1000)
-        print(f"DEBUG: initial assignment={consumer.assignment()}")
-    except Exception as e:
-        print(f"WARN: initial poll failed: {e}")
-
-    empty_polls = 0
-    while consumer_running:
+async def broadcast_messages():
+    if not clients:
+        return
+    messages = await get_last_messages()
+    payload = json.dumps({"type": "messagesUpdate", "messages": messages})
+    dead: list[WebSocket] = []
+    for ws in list(clients):
         try:
-            msg_pack = consumer.poll(timeout_ms=1000, max_records=50)
-        except Exception as e:
-            print(f"WARN: Kafka poll error: {e}")
-            time.sleep(1)
-            continue
+            await ws.send_text(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        clients.discard(ws)
 
-        if not msg_pack:
-            empty_polls += 1
-            if empty_polls % 10 == 0:
-                print(f"DEBUG: consumer poll returned no messages (count={empty_polls}) assignment={consumer.assignment()}")
-            continue
 
-        for tp, messages in msg_pack.items():
-            print(f"DEBUG: received {len(messages)} messages from {tp}")
-            for msg in messages:
-                if msg.value is None:
-                    continue
-                try:
-                    data = json.loads(msg.value.decode("utf-8"))
-                except Exception as e:
-                    print(f"DEBUG: failed to decode Kafka message: {e}")
-                    continue
-                print(f"DEBUG: consumed from Kafka: {data}")
-                if loop:
-                    asyncio.run_coroutine_threadsafe(handle_message(data), loop)
-
-    print("DEBUG: consumer_loop stopping, closing consumer")
-    consumer.close()
+ 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -238,7 +274,6 @@ async def lifespan(app: FastAPI):
             yield
         else:
             start_producer()
-            start_consumer()
             loop = asyncio.get_running_loop()
             consumer_running = True
             consumer_thread = threading.Thread(target=consumer_loop, daemon=True)
@@ -337,3 +372,4 @@ async def handle_message(data: dict):
     print(f"DEBUG: handle_message processing msg={msg}")
     await save_message_to_db(text=text, user=user, ts=ts)
     await store_message_in_redis(msg)
+    await broadcast_messages()
