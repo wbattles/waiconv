@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  waiconv:
+  - apiVersion: v2
+    appVersion: "1.0"
+    created: "2025-12-11T17:16:24.493020924Z"
+    description: helm chart for waiconv application
+    digest: 24f84052bcfea47bbc9fb6032b6521edd83c0efd423de5304fd0a5eda74ce9cf
+    name: waiconv
+    type: application
+    urls:
+    - https://github.com/wbattles/waiconv/releases/download/waiconv-0.1.0/waiconv-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-12-11T17:16:24.493026797Z"
