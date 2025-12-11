@@ -6,7 +6,7 @@ on:
       - main
       - dev
     paths:
-      - confluent-app/**
+      - app/**
       - .github/workflows/publish.yaml
 
 permissions:
