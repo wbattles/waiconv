@@ -138,9 +138,16 @@ def start_consumer():
     cfg = build_kafka_config()
     cfg["group.id"] = KAFKA_GROUP_ID
     cfg["auto.offset.reset"] = "latest"
-    print("Starting Kafka consumer with group", KAFKA_GROUP_ID, "topic", KAFKA_TOPIC)
+
+    def on_assign(c, partitions):
+        print("Kafka consumer assigned to partitions:", partitions)
+
+    def on_revoke(c, partitions):
+        print("Kafka consumer revoked from partitions:", partitions)
+
     consumer = Consumer(cfg)
-    consumer.subscribe([KAFKA_TOPIC])
+    consumer.subscribe([KAFKA_TOPIC], on_assign=on_assign, on_revoke=on_revoke)
+    print("Starting Kafka consumer with group", KAFKA_GROUP_ID, "topic", KAFKA_TOPIC)
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
