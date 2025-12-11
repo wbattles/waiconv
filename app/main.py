@@ -64,6 +64,7 @@ def build_kafka_config() -> dict:
         cfg["sasl_mechanism"] = KAFKA_SASL_MECHANISM
         cfg["sasl_plain_username"] = KAFKA_SASL_USERNAME
         cfg["sasl_plain_password"] = KAFKA_SASL_PASSWORD
+    print(f"DEBUG: Kafka config: servers={servers} sasl_enabled={KAFKA_SASL_ENABLED} topic={KAFKA_TOPIC} group_id={KAFKA_GROUP_ID}")
     return cfg
 
 
@@ -72,7 +73,7 @@ async def start_redis():
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
     try:
         await redis_client.ping()
-        print("Redis connected")
+        print(f"Redis connected host={REDIS_HOST} port={REDIS_PORT} db={REDIS_DB} key={MESSAGES_KEY}")
     except Exception as e:
         print(f"WARN: Redis ping failed: {e}")
 
@@ -120,12 +121,14 @@ async def start_postgres(max_attempts: int = 10, delay: float = 2.0):
 def start_producer():
     global producer
     cfg = build_kafka_config()
+    print("DEBUG: creating KafkaProducer")
     producer = KafkaProducer(**cfg)
 
 
 def start_consumer():
     global consumer
     cfg = build_kafka_config()
+    print(f"DEBUG: creating KafkaConsumer topic={KAFKA_TOPIC} group_id={KAFKA_GROUP_ID}")
     consumer = KafkaConsumer(
         KAFKA_TOPIC,
         **cfg,
@@ -154,41 +157,51 @@ async def save_message_to_db(text: str, user: str, ts: datetime | str):
                 user if user else None,
                 text,
             )
+        print(f"DEBUG: inserted into Postgres ts={ts_value} user={user} text={text}")
     except Exception as e:
         print(f"WARN: failed to insert into Postgres: {e}")
 
 
 async def store_message_in_redis(msg: dict):
     if redis_client is None:
+        print("DEBUG: redis_client is None, cannot store message")
         return
     data = json.dumps(msg)
     await redis_client.lpush(MESSAGES_KEY, data)
     await redis_client.ltrim(MESSAGES_KEY, 0, MAX_MESSAGES - 1)
+    print(f"DEBUG: stored message in Redis key={MESSAGES_KEY}: {msg}")
 
 
 async def get_last_messages(limit: int = MAX_MESSAGES):
     if redis_client is None:
+        print("DEBUG: redis_client is None in get_last_messages")
         return []
     raw = await redis_client.lrange(MESSAGES_KEY, 0, limit - 1)
+    print(f"DEBUG: get_last_messages raw_len={len(raw)}")
     result = []
     for item in raw:
         try:
             result.append(json.loads(item))
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: failed to decode Redis item: {e}")
             continue
+    print(f"DEBUG: get_last_messages decoded_len={len(result)}")
     return result
 
 
 async def broadcast_messages():
     if not clients:
+        print("DEBUG: no clients to broadcast to")
         return
     messages = await get_last_messages()
     payload = json.dumps({"type": "messagesUpdate", "messages": messages})
+    print(f"DEBUG: broadcasting to {len(clients)} clients messages_len={len(messages)}")
     dead: list[WebSocket] = []
     for ws in list(clients):
         try:
             await ws.send_text(payload)
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: failed to send to client: {e}")
             dead.append(ws)
     for ws in dead:
         clients.discard(ws)
@@ -197,6 +210,7 @@ async def broadcast_messages():
 def consumer_loop():
     global consumer_running
     assert consumer is not None
+    print("DEBUG: consumer_loop started")
     while consumer_running:
         try:
             msg_pack = consumer.poll(timeout_ms=1000)
@@ -214,11 +228,14 @@ def consumer_loop():
                     continue
                 try:
                     data = json.loads(value_bytes.decode("utf-8"))
-                except Exception:
+                except Exception as e:
+                    print(f"DEBUG: failed to decode Kafka message: {e}")
                     continue
+                print(f"DEBUG: consumed from Kafka: {data}")
                 if loop is not None:
                     asyncio.run_coroutine_threadsafe(handle_message(data), loop)
 
+    print("DEBUG: consumer_loop stopping, closing consumer")
     consumer.close()
 
 
@@ -279,17 +296,20 @@ async def root():
 @app.get("/api/messages")
 async def get_messages():
     messages = await get_last_messages()
+    print(f"DEBUG: /api/messages returning len={len(messages)}")
     return {"messages": messages}
 
 
 @app.post("/api/message")
 async def post_message(payload: dict = Body(...)):
     if not producer:
+        print("DEBUG: producer not ready in /api/message")
         return {"status": "error", "message": "producer not ready"}
 
     text = str(payload.get("text", "")).strip()
     user = str(payload.get("user", "")).strip()
     if not text:
+        print("DEBUG: empty text in /api/message")
         return {"status": "error", "message": "empty"}
 
     ts = datetime.now(timezone.utc).isoformat()
@@ -303,6 +323,7 @@ async def post_message(payload: dict = Body(...)):
 
     try:
         value = json.dumps(event).encode("utf-8")
+        print(f"DEBUG: sending to Kafka topic={KAFKA_TOPIC} event={event}")
         producer.send(KAFKA_TOPIC, value=value)
     except Exception as e:
         print(f"Kafka produce failed: {e}")
@@ -315,6 +336,7 @@ async def post_message(payload: dict = Body(...)):
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     clients.add(ws)
+    print(f"DEBUG: WebSocket connected, clients={len(clients)}")
     messages = await get_last_messages()
     await ws.send_text(json.dumps({"type": "messagesUpdate", "messages": messages}))
     try:
@@ -322,12 +344,15 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.receive_text()
     except WebSocketDisconnect:
         clients.discard(ws)
-    except Exception:
+        print(f"DEBUG: WebSocket disconnected, clients={len(clients)}")
+    except Exception as e:
         clients.discard(ws)
+        print(f"DEBUG: WebSocket error, clients={len(clients)} err={e}")
 
 
 async def handle_message(data: dict):
     if data.get("type") != "chat":
+        print(f"DEBUG: handle_message ignored non-chat event={data}")
         return
 
     text = str(data.get("text", "")).strip()
@@ -335,6 +360,7 @@ async def handle_message(data: dict):
     ts = str(data.get("ts", "")).strip()
 
     if not text:
+        print("DEBUG: handle_message got empty text")
         return
 
     msg = {
@@ -343,6 +369,7 @@ async def handle_message(data: dict):
         "ts": ts,
     }
 
+    print(f"DEBUG: handle_message processing msg={msg}")
     await save_message_to_db(text=text, user=user, ts=ts)
     await store_message_in_redis(msg)
     await broadcast_messages()
