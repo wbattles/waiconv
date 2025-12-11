@@ -1,0 +1,71 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: waiconv-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # Example: Local Kafka using Redpanda (no SASL)
+  kafka:
+    image: redpandadata/redpanda:latest
+    container_name: waiconv-kafka
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --overprovisioned
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://kafka:9092
+    ports:
+      - "9092:9092"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: waiconv-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chat
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: .
+    pull_policy: build
+    container_name: waiconv
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - kafka
+      - postgres
+    ports:
+      - "8000:8000"
+    environment:
+      # --- Redis config ---
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_MESSAGES_KEY: "chat_messages"
+
+      # --- Kafka config (plain, no SASL) ---
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      KAFKA_TOPIC: "chat-messages"
+      KAFKA_GROUP_ID: "chat-consumers"
+      KAFKA_SASL_ENABLED: "false"
+      KAFKA_SECURITY_PROTOCOL: "PLAINTEXT"
+
+      # --- Postgres config ---
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "chat"
+      POSTGRES_USER: "chat"
+      POSTGRES_PASSWORD: "password"
+
+      MAX_MESSAGES: "10"
