@@ -22,7 +22,7 @@ KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "")
 KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "")
 KAFKA_SASL_ENABLED = os.getenv("KAFKA_SASL_ENABLED", "false").lower() == "true"
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "chat-messages")
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", f"waiconv-{uuid.uuid4().hex}")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID") or f"waiconv-{uuid.uuid4().hex}"
 
 REDIS_HOST = os.getenv("REDIS_HOST", "waiconv-redis-master")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -141,15 +141,24 @@ def start_consumer():
     cfg["auto.offset.reset"] = "earliest"
     cfg["enable.auto.commit"] = False
 
+    consumer = Consumer(cfg)
+    print("Starting Kafka consumer with group", KAFKA_GROUP_ID, "topic", KAFKA_TOPIC)
+
+    try:
+        md = consumer.list_topics(timeout=10)
+        print("Kafka metadata topics:", list(md.topics.keys()))
+        if KAFKA_TOPIC not in md.topics:
+            print("WARN: Kafka topic", KAFKA_TOPIC, "not found in metadata")
+    except Exception as e:
+        print("WARN: list_topics failed:", e)
+
     def on_assign(c, partitions):
         print("Kafka consumer assigned to partitions:", partitions)
 
     def on_revoke(c, partitions):
         print("Kafka consumer revoked from partitions:", partitions)
 
-    consumer = Consumer(cfg)
     consumer.subscribe([KAFKA_TOPIC], on_assign=on_assign, on_revoke=on_revoke)
-    print("Starting Kafka consumer with group", KAFKA_GROUP_ID, "topic", KAFKA_TOPIC)
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
@@ -252,7 +261,6 @@ async def post_message(payload: dict = Body(...)):
     try:
         value = json.dumps(event).encode("utf-8")
         producer.produce(KAFKA_TOPIC, value=value, callback=delivery_report)
-        # Force delivery so we see any error in logs
         producer.flush(5)
         print("Produced Kafka message:", event)
     except Exception as e:
@@ -279,7 +287,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 async def handle_message(data: dict):
     if data.get("type") != "chat":
-        print("Ignoring non-chat Kafka message:", data)
+        print("Ignoring non-chat message:", data)
         return
 
     text = str(data.get("text", "")).strip()
@@ -287,7 +295,7 @@ async def handle_message(data: dict):
     ts = str(data.get("ts", "")).strip()
 
     if not text:
-        print("Ignoring empty chat message from Kafka:", data)
+        print("Ignoring empty chat message:", data)
         return
 
     msg = {
@@ -296,7 +304,7 @@ async def handle_message(data: dict):
         "ts": ts,
     }
 
-    print("Handling Kafka chat message:", msg)
+    print("Handling chat message:", msg)
 
     await save_message_to_db(text=text, user=user, ts=ts)
     await store_message_in_redis(msg)
@@ -341,6 +349,7 @@ def consumer_loop():
     print("Kafka consumer loop exiting")
     consumer.close()
 
+
 @app.on_event("startup")
 async def startup_event():
     global consumer_thread, consumer_running, loop
@@ -356,6 +365,8 @@ async def startup_event():
     print("KAFKA_SECURITY_PROTOCOL:", KAFKA_SECURITY_PROTOCOL)
     print("KAFKA_SASL_ENABLED:", KAFKA_SASL_ENABLED)
     print("KAFKA_SASL_MECHANISM:", KAFKA_SASL_MECHANISM)
+    print("KAFKA_GROUP_ID:", KAFKA_GROUP_ID)
+    print("KAFKA_TOPIC:", KAFKA_TOPIC)
 
     start_producer()
     start_consumer()
