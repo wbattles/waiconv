@@ -72,6 +72,7 @@ def build_kafka_config() -> dict:
         if KAFKA_SASL_PASSWORD:
             cfg["sasl.password"] = KAFKA_SASL_PASSWORD
 
+    print("Kafka config:", cfg)
     return cfg
 
 
@@ -128,6 +129,7 @@ async def start_postgres(max_attempts: int = 10, delay: float = 2.0):
 def start_producer():
     global producer
     cfg = build_kafka_config()
+    print("Starting Kafka producer")
     producer = Producer(cfg)
 
 
@@ -136,6 +138,7 @@ def start_consumer():
     cfg = build_kafka_config()
     cfg["group.id"] = KAFKA_GROUP_ID
     cfg["auto.offset.reset"] = "latest"
+    print("Starting Kafka consumer with group", KAFKA_GROUP_ID, "topic", KAFKA_TOPIC)
     consumer = Consumer(cfg)
     consumer.subscribe([KAFKA_TOPIC])
 
@@ -165,10 +168,12 @@ async def save_message_to_db(text: str, user: str, ts: datetime | str):
 
 async def store_message_in_redis(msg: dict):
     if redis_client is None:
+        print("WARN: Redis client is None, cannot store message")
         return
     data = json.dumps(msg)
     await redis_client.lpush(MESSAGES_KEY, data)
     await redis_client.ltrim(MESSAGES_KEY, 0, MAX_MESSAGES - 1)
+    print("Stored message in Redis:", msg)
 
 
 async def get_last_messages(limit: int = MAX_MESSAGES):
@@ -197,6 +202,7 @@ async def broadcast_messages():
             dead.append(ws)
     for ws in dead:
         clients.discard(ws)
+    print("Broadcasted messages to", len(clients), "clients")
 
 
 @app.get("/api/messages")
@@ -208,6 +214,7 @@ async def get_messages():
 @app.post("/api/message")
 async def post_message(payload: dict = Body(...)):
     if not producer:
+        print("ERROR: Kafka producer not ready")
         return {"status": "error", "message": "producer not ready"}
 
     text = str(payload.get("text", "")).strip()
@@ -228,6 +235,7 @@ async def post_message(payload: dict = Body(...)):
         value = json.dumps(event).encode("utf-8")
         producer.produce(KAFKA_TOPIC, value=value)
         producer.poll(0)
+        print("Produced Kafka message:", event)
     except Exception as e:
         print(f"Kafka produce failed: {e}")
         return {"status": "error", "message": "kafka_failed"}
@@ -252,6 +260,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 async def handle_message(data: dict):
     if data.get("type") != "chat":
+        print("Ignoring non-chat Kafka message:", data)
         return
 
     text = str(data.get("text", "")).strip()
@@ -259,6 +268,7 @@ async def handle_message(data: dict):
     ts = str(data.get("ts", "")).strip()
 
     if not text:
+        print("Ignoring empty chat message from Kafka:", data)
         return
 
     msg = {
@@ -266,6 +276,8 @@ async def handle_message(data: dict):
         "user": user,
         "ts": ts,
     }
+
+    print("Handling Kafka chat message:", msg)
 
     await save_message_to_db(text=text, user=user, ts=ts)
     await store_message_in_redis(msg)
@@ -275,21 +287,35 @@ async def handle_message(data: dict):
 def consumer_loop():
     global consumer_running
     assert consumer is not None
+    print("Kafka consumer loop started")
     while consumer_running:
-        msg = consumer.poll(1.0)
+        try:
+            msg = consumer.poll(1.0)
+        except Exception as e:
+            print("Kafka poll exception:", e)
+            continue
+
         if msg is None:
             continue
+
         if msg.error():
+            print("Kafka consumer error:", msg.error())
             continue
+
         try:
             value_bytes = msg.value()
             if value_bytes is None:
+                print("Kafka message has no value")
                 continue
             data = json.loads(value_bytes.decode("utf-8"))
-        except Exception:
+            print("Kafka consumer received message:", data)
+        except Exception as e:
+            print("Failed to decode Kafka message:", e)
             continue
+
         if loop is not None:
             asyncio.run_coroutine_threadsafe(handle_message(data), loop)
+    print("Kafka consumer loop exiting")
     consumer.close()
 
 
@@ -303,6 +329,11 @@ async def startup_event():
     if not KAFKA_BOOTSTRAP_SERVERS:
         print("WARN: KAFKA_BOOTSTRAP_SERVERS not set, running without Kafka")
         return
+
+    print("KAFKA_BOOTSTRAP_SERVERS:", KAFKA_BOOTSTRAP_SERVERS)
+    print("KAFKA_SECURITY_PROTOCOL:", KAFKA_SECURITY_PROTOCOL)
+    print("KAFKA_SASL_ENABLED:", KAFKA_SASL_ENABLED)
+    print("KAFKA_SASL_MECHANISM:", KAFKA_SASL_MECHANISM)
 
     start_producer()
     start_consumer()
