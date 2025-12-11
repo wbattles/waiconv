@@ -133,9 +133,10 @@ def start_consumer():
         KAFKA_TOPIC,
         **cfg,
         group_id=KAFKA_GROUP_ID,
-        auto_offset_reset="latest",
+        auto_offset_reset="earliest",
         enable_auto_commit=True,
     )
+
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
