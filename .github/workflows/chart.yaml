@@ -1,4 +1,4 @@
-name: publish waiconv helm chart
+name: publish helm chart
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
       - chart/waiconv/templates/**
       - chart/waiconv/values.yaml
       - chart/waiconv/Chart.yaml
+      - .github/workflows/chart.yaml
 
 jobs:
   release:
