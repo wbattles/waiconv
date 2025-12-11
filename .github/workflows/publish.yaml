@@ -1,10 +1,9 @@
-name: Publish Docker Image
+name: publish docker image
 
 on:
   push:
     branches:
       - main
-      - dev
     paths:
       - app/**
       - .github/workflows/publish.yaml
@@ -49,4 +48,3 @@ jobs:
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
             org.opencontainers.image.description=Container for ${{ github.repository }}
-
