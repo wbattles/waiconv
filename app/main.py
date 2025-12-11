@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from confluent_kafka import Producer, Consumer
+from confluent_kafka import Producer, Consumer, TopicPartition
 import redis.asyncio as redis
 import asyncpg
 
@@ -22,7 +22,8 @@ KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "")
 KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "")
 KAFKA_SASL_ENABLED = os.getenv("KAFKA_SASL_ENABLED", "false").lower() == "true"
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "chat-messages")
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID") or f"waiconv-{uuid.uuid4().hex}"
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "waiconv-unused")
+
 
 REDIS_HOST = os.getenv("REDIS_HOST", "waiconv-redis-master")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -137,28 +138,25 @@ def start_producer():
 def start_consumer():
     global consumer
     cfg = build_kafka_config()
-    cfg["group.id"] = KAFKA_GROUP_ID
-    cfg["auto.offset.reset"] = "earliest"
-    cfg["enable.auto.commit"] = False
-
+    # Do NOT set group.id, do NOT use subscribe
     consumer = Consumer(cfg)
-    print("Starting Kafka consumer with group", KAFKA_GROUP_ID, "topic", KAFKA_TOPIC)
+    print("Starting Kafka consumer (manual assign) topic", KAFKA_TOPIC)
 
     try:
-        md = consumer.list_topics(timeout=10)
-        print("Kafka metadata topics:", list(md.topics.keys()))
-        if KAFKA_TOPIC not in md.topics:
+        md = consumer.list_topics(KAFKA_TOPIC, timeout=10)
+        topic_md = md.topics.get(KAFKA_TOPIC)
+        if topic_md is None:
             print("WARN: Kafka topic", KAFKA_TOPIC, "not found in metadata")
+            return
+
+        partitions = [
+            TopicPartition(KAFKA_TOPIC, p_id)
+            for p_id in topic_md.partitions.keys()
+        ]
+        print("Kafka topic partitions for consumer assignment:", partitions)
+        consumer.assign(partitions)
     except Exception as e:
-        print("WARN: list_topics failed:", e)
-
-    def on_assign(c, partitions):
-        print("Kafka consumer assigned to partitions:", partitions)
-
-    def on_revoke(c, partitions):
-        print("Kafka consumer revoked from partitions:", partitions)
-
-    consumer.subscribe([KAFKA_TOPIC], on_assign=on_assign, on_revoke=on_revoke)
+        print("Kafka consumer assignment failed:", e)
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
@@ -342,10 +340,6 @@ def consumer_loop():
 
         if loop is not None:
             asyncio.run_coroutine_threadsafe(handle_message(data), loop)
-            try:
-                consumer.commit(asynchronous=True)
-            except Exception as e:
-                print("Kafka commit failed:", e)
     print("Kafka consumer loop exiting")
     consumer.close()
 
