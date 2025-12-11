@@ -15,9 +15,9 @@ jobs:
       contents: read
       packages: write
     env:
-      CHART_DIR: charts/waichat
+      CHART_DIR: charts/waiconv
       REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}/waichat
+      IMAGE_NAME: ${{ github.repository }}/waiconv
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,8 +55,8 @@ jobs:
       - name: Push chart to GHCR (OCI)
         run: |
           CHART_TGZ=$(ls dist/*.tgz | head -n1)
-          helm push "$CHART_TGZ" oci://ghcr.io/${{ github.repository_owner }}/waichat
+          helm push "$CHART_TGZ" oci://ghcr.io/${{ github.repository_owner }}/waiconv
 
       - name: Output published info
         run: |
-          echo "Published chart to oci://ghcr.io/${{ github.repository_owner }}/waichat with version ${{ steps.version.outputs.version }}"
+          echo "Published chart to oci://ghcr.io/${{ github.repository_owner }}/waiconv with version ${{ steps.version.outputs.version }}"

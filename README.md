@@ -1,4 +1,4 @@
-## Waichat
+## Waiconv
 Conversations made simple.
 
 ## License

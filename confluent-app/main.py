@@ -21,7 +21,7 @@ KAFKA_SASL_PASSWORD = os.getenv("KAFKA_SASL_PASSWORD", "")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "chat-messages")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "chat-consumers")
 
-REDIS_HOST = os.getenv("REDIS_HOST", "waichat-redis-master")
+REDIS_HOST = os.getenv("REDIS_HOST", "waiconv-redis-master")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 

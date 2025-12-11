@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: waichat-confluent
+  IMAGE_NAME: waiconv-confluent
 
 jobs:
   build-and-publish:

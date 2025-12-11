@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "waichat.fullname" . }}-redis
+  name: {{ include "waiconv.fullname" . }}-redis
   labels:
-    {{- include "waichat.labels" . | nindent 4 }}
+    {{- include "waiconv.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "waichat.selectorLabels" . | nindent 6 }}
+      {{- include "waiconv.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: redis
   template:
     metadata:
       labels:
-        {{- include "waichat.selectorLabels" . | nindent 8 }}
+        {{- include "waiconv.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: redis
     spec:
       containers:
@@ -34,6 +34,6 @@ spec:
       volumes:
       - name: redis-data
         persistentVolumeClaim:
-          claimName: {{ include "waichat.fullname" . }}-redis
+          claimName: {{ include "waiconv.fullname" . }}-redis
       {{- end }}
 {{- end }}

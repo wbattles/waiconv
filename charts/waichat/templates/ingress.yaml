@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "waichat.fullname" . }}
+  name: {{ include "waiconv.fullname" . }}
   labels:
-    {{- include "waichat.labels" . | nindent 4 }}
+    {{- include "waiconv.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -33,7 +33,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "waichat.fullname" $ }}
+                name: {{ include "waiconv.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}

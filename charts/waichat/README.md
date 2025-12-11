@@ -1,6 +1,6 @@
-# waichat Helm Chart
+# waiconv Helm Chart
 
-This Helm chart deploys the waichat Counter application with Redis on Kubernetes.
+This Helm chart deploys the waiconv Counter application with Redis on Kubernetes.
 
 ## Prerequisites
 
@@ -14,24 +14,24 @@ This Helm chart deploys the waichat Counter application with Redis on Kubernetes
 
 ```bash
 cd ../app
-docker build -t waichat:latest .
+docker build -t waiconv:latest .
 ```
 
 ### Install the chart
 
 ```bash
 # From the helm directory
-helm install waichat . --create-namespace --namespace waichat
+helm install waiconv . --create-namespace --namespace waiconv
 
 # Or with custom values
-helm install waichat . -f values.yaml --namespace waichat
+helm install waiconv . -f values.yaml --namespace waiconv
 ```
 
 ### Access the application
 
 ```bash
 # Port-forward to access locally
-kubectl port-forward -n waichat service/waichat 8000:8000
+kubectl port-forward -n waiconv service/waiconv 8000:8000
 
 # Then open http://localhost:8000
 ```
@@ -50,13 +50,13 @@ Key configuration values in `values.yaml`:
 ## Upgrade
 
 ```bash
-helm upgrade waichat . --namespace waichat
+helm upgrade waiconv . --namespace waiconv
 ```
 
 ## Uninstall
 
 ```bash
-helm uninstall waichat --namespace waichat
+helm uninstall waiconv --namespace waiconv
 ```
 
 ## Notes

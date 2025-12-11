@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "waichat.fullname" . }}-postgres
+  name: {{ include "waiconv.fullname" . }}-postgres
   labels:
-    {{- include "waichat.labels" . | nindent 4 }}
+    {{- include "waiconv.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "waichat.selectorLabels" . | nindent 6 }}
+      {{- include "waiconv.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        {{- include "waichat.selectorLabels" . | nindent 8 }}
+        {{- include "waiconv.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
       containers:
@@ -26,7 +26,7 @@ spec:
           containerPort: 5432
           protocol: TCP
         env:
-        {{- $secretName := default (printf "%s-postgres-secret" (include "waichat.fullname" .)) .Values.postgres.existingSecret }}
+        {{- $secretName := default (printf "%s-postgres-secret" (include "waiconv.fullname" .)) .Values.postgres.existingSecret }}
         - name: POSTGRES_DB
           valueFrom:
             secretKeyRef:
@@ -51,6 +51,6 @@ spec:
       volumes:
       - name: postgres-data
         persistentVolumeClaim:
-          claimName: {{ include "waichat.fullname" . }}-postgres-pvc
+          claimName: {{ include "waiconv.fullname" . }}-postgres-pvc
       {{- end }}
 {{- end }}

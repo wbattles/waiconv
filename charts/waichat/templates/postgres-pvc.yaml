@@ -3,9 +3,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "waichat.fullname" . }}-postgres-pvc
+  name: {{ include "waiconv.fullname" . }}-postgres-pvc
   labels:
-    {{- include "waichat.labels" . | nindent 4 }}
+    {{- include "waiconv.labels" . | nindent 4 }}
 spec:
   accessModes:
 {{- if and $pvc $pvc.accessModes }}

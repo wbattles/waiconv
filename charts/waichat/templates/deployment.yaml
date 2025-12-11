@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "waichat.fullname" . }}
+  name: {{ include "waiconv.fullname" . }}
   labels:
-    {{- include "waichat.labels" . | nindent 4 }}
+    {{- include "waiconv.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "waichat.selectorLabels" . | nindent 6 }}
+      {{- include "waiconv.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: app
   template:
     metadata:
       labels:
-        {{- include "waichat.selectorLabels" . | nindent 8 }}
+        {{- include "waiconv.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
       containers:
@@ -50,23 +50,23 @@ spec:
         - name: KAFKA_SASL_MECHANISM
           value: {{ .Values.config.kafka.saslMechanism | quote }}
         - name: POSTGRES_HOST
-          value: {{ default (printf "%s-postgres" (include "waichat.fullname" .)) .Values.config.postgres.host | quote }}
+          value: {{ default (printf "%s-postgres" (include "waiconv.fullname" .)) .Values.config.postgres.host | quote }}
         - name: POSTGRES_PORT
           value: "{{ .Values.postgres.service.port }}"
         - name: POSTGRES_DB
           valueFrom:
             secretKeyRef:
-              name: {{ default (printf "%s-postgres-secret" (include "waichat.fullname" .)) .Values.postgres.existingSecret | quote }}
+              name: {{ default (printf "%s-postgres-secret" (include "waiconv.fullname" .)) .Values.postgres.existingSecret | quote }}
               key: database
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: {{ default (printf "%s-postgres-secret" (include "waichat.fullname" .)) .Values.postgres.existingSecret | quote }}
+              name: {{ default (printf "%s-postgres-secret" (include "waiconv.fullname" .)) .Values.postgres.existingSecret | quote }}
               key: username
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ default (printf "%s-postgres-secret" (include "waichat.fullname" .)) .Values.postgres.existingSecret | quote }}
+              name: {{ default (printf "%s-postgres-secret" (include "waiconv.fullname" .)) .Values.postgres.existingSecret | quote }}
               key: password
         - name: MAX_MESSAGES
           value: {{ .Values.config.maxMessages | quote }}

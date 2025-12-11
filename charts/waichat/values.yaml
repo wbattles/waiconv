@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/wbattles/waichat
+  repository: ghcr.io/wbattles/waiconv
   pullPolicy: Always
   tag: latest
 
@@ -14,7 +14,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: waichat.local
+    - host: waiconv.local
       paths:
         - path: /
           pathType: Prefix
@@ -53,7 +53,7 @@ postgres:
 
 config:
   redis:
-    host: "waichat-redis"
+    host: "waiconv-redis"
     port: "6379"
     db: "0"
     key: "chat:messages"
