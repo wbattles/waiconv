@@ -21,6 +21,12 @@ ingress:
           pathType: Prefix
 
 resources: {}
+  # requests:
+  #   memory: "128Mi"
+  #   cpu: "100m"
+  # limits:
+  #   memory: "256Mi"
+  #   cpu: "500m"
 
 redis:
   enabled: true
@@ -31,6 +37,13 @@ redis:
     port: 6379
   persistence:
     enabled: false
+  resources: {}
+    # requests:
+    #   memory: "64Mi"
+    #   cpu: "50m"
+    # limits:
+    #   memory: "128Mi"
+    #   cpu: "200m"
 
 postgres:
   enabled: true
@@ -50,6 +63,13 @@ postgres:
       - ReadWriteOnce
     size: 1Gi
     storageClassName: ""
+  resources: {}
+    # requests:
+    #   memory: "128Mi"
+    #   cpu: "100m"
+    # limits:
+    #   memory: "256Mi"
+    #   cpu: "500m"
 
 config:
   redis:
