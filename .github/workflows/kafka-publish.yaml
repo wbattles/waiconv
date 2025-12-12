@@ -39,8 +39,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./app/waiconv
-          file: ./app/waiconv/Dockerfile
+          context: ./app/waiconv-kafka
+          file: ./app/waiconv-kafka/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
