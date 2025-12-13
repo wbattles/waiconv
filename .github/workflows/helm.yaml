@@ -1,4 +1,4 @@
-name: publish helm chart
+name: waiconv helm chart
 
 on:
   push:
