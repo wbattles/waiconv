@@ -1,4 +1,4 @@
-name: publish helm chart
+name: publish helm chart w/ kafka integration
 
 on:
   push:
