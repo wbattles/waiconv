@@ -1,0 +1,24 @@
+{{- $pvc := .Values.postgres.persistentVolumeClaim }}
+{{- if and .Values.postgres.enabled $pvc.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "waiconv.fullname" . }}-postgres-pvc
+  labels:
+    {{- include "waiconv.labels" . | nindent 4 }}
+spec:
+  accessModes:
+{{- if and $pvc $pvc.accessModes }}
+{{- range $pvc.accessModes }}
+    - {{ . | quote }}
+{{- end }}
+{{- else }}
+    - ReadWriteOnce
+{{- end }}
+  resources:
+    requests:
+      storage: {{ $pvc.size | quote }}
+  {{- if and $pvc $pvc.storageClassName }}
+  storageClassName: {{ $pvc.storageClassName | quote }}
+  {{- end }}
+{{- end }}

@@ -33,6 +33,25 @@ spec:
           value: {{ .Values.config.redis.db | quote }}
         - name: REDIS_MESSAGES_KEY
           value: {{ .Values.config.redis.key | quote }}
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: {{ .Values.config.kafka.bootstrapServers | quote }}
+        - name: KAFKA_SASL_USERNAME
+          value: {{ .Values.config.kafka.saslUsername | quote }}
+        - name: KAFKA_SASL_PASSWORD
+          value: {{ .Values.config.kafka.saslPassword | quote }}
+        - name: KAFKA_TOPIC
+          value: {{ .Values.config.kafka.topic | quote }}
+        - name: KAFKA_GROUP_ID
+          value: {{ .Values.config.kafka.groupId | quote }}
+        - name: KAFKA_PARITION_KEY
+          value: {{ .Values.config.kafka.partitionKey | quote }}
+          value: {{ .Values.config.kafka.groupId | quote }}
+        - name: KAFKA_SASL_ENABLED
+          value: {{ ternary "true" "false" .Values.config.kafka.saslEnabled | quote }}
+        - name: KAFKA_SECURITY_PROTOCOL
+          value: {{ .Values.config.kafka.securityProtocol | quote }}
+        - name: KAFKA_SASL_MECHANISM
+          value: {{ .Values.config.kafka.saslMechanism | quote }}
         - name: POSTGRES_HOST
           value: {{ default (printf "%s-postgres" (include "waiconv.fullname" .)) .Values.config.postgres.host | quote }}
         - name: POSTGRES_PORT

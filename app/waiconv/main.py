@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import threading
 from typing import Set
 
 from datetime import datetime, timezone
@@ -9,29 +8,15 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from confluent_kafka import Producer, Consumer
 import redis.asyncio as redis
 import asyncpg
 
 app = FastAPI()
 
-# Kafka configuration
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "chat-messages")
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "chat-consumers")
-
-# SASL configuration (optional)
-KAFKA_SASL_ENABLED = os.getenv("KAFKA_SASL_ENABLED", "false").lower() == "true"
-KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
-KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "PLAIN")
-KAFKA_SASL_USERNAME = os.getenv("KAFKA_SASL_USERNAME", "")
-KAFKA_SASL_PASSWORD = os.getenv("KAFKA_SASL_PASSWORD", "")
-
 # Redis configuration
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_DB = int(os.getenv("REDIS_DB", "0"))
-
 MESSAGES_KEY = os.getenv("REDIS_MESSAGES_KEY", "chat_messages")
 MAX_MESSAGES = int(os.getenv("MAX_MESSAGES", "5"))
 
@@ -43,12 +28,6 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "chat")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 
 clients: Set[WebSocket] = set()
-
-producer: Producer | None = None
-consumer: Consumer | None = None
-consumer_thread: threading.Thread | None = None
-consumer_running: bool = False
-loop: asyncio.AbstractEventLoop | None = None
 redis_client: redis.Redis | None = None
 pg_pool: asyncpg.Pool | None = None
 
@@ -58,24 +37,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 async def root():
     return FileResponse("static/index.html")
-
-
-def build_kafka_config() -> dict:
-    """Build Kafka configuration based on environment variables."""
-    config = {
-        "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
-    }
-
-    if KAFKA_SASL_ENABLED:
-        config["security.protocol"] = KAFKA_SECURITY_PROTOCOL
-        config["sasl.mechanisms"] = KAFKA_SASL_MECHANISM
-        config["sasl.username"] = KAFKA_SASL_USERNAME
-        config["sasl.password"] = KAFKA_SASL_PASSWORD
-    else:
-        # For plain Kafka without authentication
-        config["security.protocol"] = KAFKA_SECURITY_PROTOCOL
-
-    return config
 
 
 async def start_redis():
@@ -126,23 +87,6 @@ async def start_postgres(max_attempts: int = 10, delay: float = 2.0):
             if attempt < max_attempts:
                 await asyncio.sleep(delay)
     print("ERROR: Could not connect to Postgres after retries; continuing without DB")
-
-
-def start_producer():
-    global producer
-    cfg = build_kafka_config()
-    producer = Producer(cfg)
-    print(f"Kafka producer started (SASL enabled: {KAFKA_SASL_ENABLED})")
-
-
-def start_consumer():
-    global consumer
-    cfg = build_kafka_config()
-    cfg["group.id"] = KAFKA_GROUP_ID
-    cfg["auto.offset.reset"] = "latest"
-    consumer = Consumer(cfg)
-    consumer.subscribe([KAFKA_TOPIC])
-    print(f"Kafka consumer started (SASL enabled: {KAFKA_SASL_ENABLED})")
 
 
 async def save_message_to_db(text: str, user: str, ts: datetime | str):
@@ -212,9 +156,6 @@ async def get_messages():
 
 @app.post("/api/message")
 async def post_message(payload: dict = Body(...)):
-    if not producer:
-        return {"status": "error", "message": "producer not ready"}
-
     text = str(payload.get("text", "")).strip()
     user = str(payload.get("user", "")).strip()
     if not text:
@@ -222,20 +163,19 @@ async def post_message(payload: dict = Body(...)):
 
     ts = datetime.now(timezone.utc).isoformat()
 
-    event = {
-        "type": "chat",
+    msg = {
         "text": text,
         "user": user,
         "ts": ts,
     }
 
     try:
-        value = json.dumps(event).encode("utf-8")
-        producer.produce(KAFKA_TOPIC, value=value)
-        producer.poll(0)
+        await save_message_to_db(text=text, user=user, ts=ts)
+        await store_message_in_redis(msg)
+        await broadcast_messages()
     except Exception as e:
-        print(f"Kafka produce failed: {e}")
-        return {"status": "error", "message": "kafka_failed"}
+        print(f"Failed to save message: {e}")
+        return {"status": "error", "message": "save_failed"}
 
     return {"status": "ok"}
 
@@ -255,85 +195,16 @@ async def websocket_endpoint(ws: WebSocket):
         clients.discard(ws)
 
 
-async def handle_message(data: dict):
-    if data.get("type") != "chat":
-        return
-
-    text = str(data.get("text", "")).strip()
-    user = str(data.get("user", "")).strip()
-    ts = str(data.get("ts", "")).strip()
-
-    if not text:
-        return
-
-    msg = {
-        "text": text,
-        "user": user,
-        "ts": ts,
-    }
-
-    await save_message_to_db(text=text, user=user, ts=ts)
-    await store_message_in_redis(msg)
-    await broadcast_messages()
-
-
-def consumer_loop():
-    global consumer_running
-    assert consumer is not None
-    while consumer_running:
-        msg = consumer.poll(1.0)
-        if msg is None:
-            continue
-        if msg.error():
-            continue
-        try:
-            value_bytes = msg.value()
-            if value_bytes is None:
-                continue
-            data = json.loads(value_bytes.decode("utf-8"))
-        except Exception:
-            continue
-        if loop is not None:
-            asyncio.run_coroutine_threadsafe(handle_message(data), loop)
-    consumer.close()
-
-
 @app.on_event("startup")
 async def startup_event():
-    global consumer_thread, consumer_running, loop
-
     await start_redis()
     await start_postgres()
-
-    if not KAFKA_BOOTSTRAP_SERVERS:
-        print("WARN: KAFKA_BOOTSTRAP_SERVERS not set, running without Kafka")
-        return
-
-    # For SASL-enabled Kafka, check credentials
-    if KAFKA_SASL_ENABLED and (not KAFKA_SASL_USERNAME or not KAFKA_SASL_PASSWORD):
-        print("WARN: SASL enabled but credentials not set, running without Kafka")
-        return
-
-    start_producer()
-    start_consumer()
-    loop = asyncio.get_running_loop()
-    consumer_running = True
-    consumer_thread = threading.Thread(target=consumer_loop, daemon=True)
-    consumer_thread.start()
-    print("Kafka producer and consumer started")
+    print("Redis and Postgres started")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global producer, consumer_running, consumer_thread, redis_client, pg_pool
-
-    if consumer_running:
-        consumer_running = False
-        if consumer_thread is not None:
-            consumer_thread.join(timeout=5)
-
-    if producer is not None:
-        producer.flush(5.0)
+    global redis_client, pg_pool
 
     if redis_client:
         await redis_client.aclose()
