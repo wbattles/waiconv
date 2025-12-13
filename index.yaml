@@ -3,6 +3,16 @@ entries:
   waiconv:
   - apiVersion: v2
     appVersion: "1.0"
+    created: "2025-12-13T00:10:22.012630143Z"
+    description: helm chart for waiconv application
+    digest: 15edae52b2c46253f0a9d1a73096f5fd3b4203db58dc87b6db600f573588f0bf
+    name: waiconv
+    type: application
+    urls:
+    - https://github.com/wbattles/waiconv/releases/download/waiconv-0.1.3/waiconv-0.1.3.tgz
+    version: 0.1.3
+  - apiVersion: v2
+    appVersion: "1.0"
     created: "2025-12-13T00:04:31.034104876Z"
     description: helm chart for waiconv application
     digest: 4effa9d53ed7fd2444b32dfe108141b71e0f7f2080267efb3d9d6339165d80dd
@@ -34,6 +44,16 @@ entries:
   waiconv-kafka:
   - apiVersion: v2
     appVersion: "1.0"
+    created: "2025-12-13T00:10:22.157753358Z"
+    description: helm chart for waiconv applicat with kafka integration
+    digest: 1ba9fc7eaff6713c4bd4a27187df286ba08b39eef1fa160a45e36cbdfe4b92b1
+    name: waiconv-kafka
+    type: application
+    urls:
+    - https://github.com/wbattles/waiconv/releases/download/waiconv-kafka-0.1.1/waiconv-kafka-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: "1.0"
     created: "2025-12-13T00:04:31.2418927Z"
     description: helm chart for waiconv applicat with kafka integration
     digest: 694363dbf21158afe3f969dd562a0d26d7870bcff654359b4c21ea2664e0d4d5
@@ -42,4 +62,4 @@ entries:
     urls:
     - https://github.com/wbattles/waiconv/releases/download/waiconv-kafka-0.1.0/waiconv-kafka-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-13T00:04:31.241906616Z"
+generated: "2025-12-13T00:10:22.157765481Z"
