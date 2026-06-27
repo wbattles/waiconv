@@ -7,7 +7,8 @@ on:
       - main
     paths:
       - app/waiconv/**
-      - .github/workflows/waiconv-publish.yaml
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
@@ -37,6 +38,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -44,8 +54,7 @@ jobs:
           file: ./app/waiconv/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.repository }}
-            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
-            org.opencontainers.image.description=Container for ${{ github.repository }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
